@@ -1,0 +1,1010 @@
+class LED_CUBE{
+public:
+  LED_CUBE();
+  void clearCube(void);
+  void sendData(char);
+  void latch(void);
+  char flip(char);
+
+private:
+  int LE, SDI, CLK;
+
+};
+
+LED_CUBE::LED_CUBE(){
+  LE = 2;
+  SDI = 3;
+  CLK = 5;
+
+  pinMode(LE, OUTPUT);
+  pinMode(SDI, OUTPUT);
+  pinMode(CLK, OUTPUT);
+  digitalWrite(LE, LOW);
+  digitalWrite(SDI, LOW);
+  digitalWrite(CLK, LOW);
+}
+
+void LED_CUBE::sendData(char data){
+  for(int i = 0; i < 8; i ++){
+    if(data & 0x01 << i){
+      digitalWrite(SDI, HIGH);
+    }
+    digitalWrite(CLK, HIGH);
+    digitalWrite(SDI, LOW);
+    digitalWrite(CLK, LOW);
+  }
+}
+
+void LED_CUBE::clearCube(){
+  for(int i = 0; i < 10; i ++){
+    sendData(0x00); 
+  }
+  latch();
+}
+
+void LED_CUBE::latch(){
+  digitalWrite(LE, HIGH);
+  digitalWrite(LE, LOW);
+}
+
+char LED_CUBE::flip(char input){
+  char output = 0x00;
+  for(int i = 7; i >= 0; i--){
+    if(input & 0x01 << i){
+      output |= 0x01 << (7 - i); 
+    }
+  }
+  return output;
+}
+
+
+LED_CUBE LC;
+byte layer;
+byte b[8];
+long runTime;
+
+void setup(){
+  LC.clearCube();
+  layer = 0x01;
+  runTime = millis();
+}
+void loop(){
+  ball(8000);
+  LC.clearCube();
+  firework(10000);
+  delay(200);
+  textFly();
+  delay(500);
+  sparkle(8000);
+  graph(14500);
+  skyFall(12000);
+}
+
+void xPlane(long duration, int repeatFrames){
+  LC.clearCube();
+  int row = 0;
+  int frameCnt = 0;
+  int dir = 1;
+  runTime = millis();
+  do{
+    LC.sendData(layer);
+    LC.sendData(0x00);
+    for(int i = 0; i < row; i ++){
+      LC.sendData(0x00); 
+    }
+    LC.sendData(0xFF);
+    for(int i = 0; i < 7-row; i++){
+      LC.sendData(0x00); 
+    }
+    LC.latch();
+
+    if(layer < 0x80){
+      layer = layer << 1;
+    }
+    else{
+      layer = 0x01;
+
+      frameCnt ++;
+      if(frameCnt >= repeatFrames){
+        frameCnt = 0;
+        row = row + dir;
+        if(row >= 8 || row < 0){
+          dir = -dir;
+          row = row + dir;
+          row = row + dir;
+        }
+      }
+    }
+  }
+  while(millis() - runTime < duration);
+}
+
+void zPlane(long duration){
+  LC.clearCube();
+  runTime = millis();
+  int frameCnt = 0;
+  do{
+    LC.sendData(layer);
+    LC.sendData(0x00);
+    for(int i = 0; i < 8; i ++){
+      LC.sendData(0xFF);
+    }
+    LC.latch();
+    delay(100);
+    if(layer < 0x80){
+      layer = layer << 1;
+    }
+    else{
+      layer = 0x01;
+    }
+  }
+  while(millis() - runTime < duration);
+}
+
+void slant(long duration){
+  LC.clearCube();
+  runTime = millis();
+  int dir = 1;
+  int c = -8;
+  int repeat = 0;
+  do{
+    for(int z = 0; z < 8; z ++){
+      LC.sendData(0x01<<z);
+      LC.sendData(0x00);
+      for(int i = 0; i < 8; i ++){
+        b[i] = 0x00; 
+      }
+      for(int x = 0; x < 8; x ++){
+        for(int y = 0; y < 8; y ++){
+          if(x + y - c < z && x + y - c > z-24){ //|| (y - c) - x == z
+            b[x] |= (0x01<<y);
+          }
+        }
+      }
+      for(int i = 0; i < 8; i ++){
+        LC.sendData(b[i]); 
+      }
+      LC.latch();
+    }
+    repeat++;
+    if(repeat > 3){
+      repeat = 0;
+      c += dir;
+      if(c > 40 || c < -8){
+        dir = -dir; 
+      }
+    }
+  }
+  while(millis() - runTime < duration);
+}
+
+void firework(long duration){
+  LC.clearCube();
+  runTime = millis();
+  long phaseTime = 0;
+  int X = 4;
+  int Y = 4;
+  int Z = 5;
+  int phase = 0;
+  double particles[28][6]; //vx,vy,vz,x,y,z
+  LC.clearCube();
+  do{
+    for(int z = 0; z < 8; z ++){
+      for(int i = 0; i < 8; i ++){
+        b[i] = 0x00; 
+      }
+      LC.sendData(0x01<<z);
+      LC.sendData(0x00);
+      if(phase == 0){
+
+        if(z < Z){
+          for(int x = 0; x < 8; x ++){
+            b[x] = 0x00;
+            if(x == X){
+              b[x] |= (1<<Y);
+            }
+          }
+          delay(60 + (20*z)); //180 bottom 300 top
+        }
+        else{
+          phase = 1;
+          z = 8;
+          for(int i = 0; i < 20; i ++){
+            particles[i][0] = random(-2,2) + 0.1*random(0,9);
+            particles[i][1] = random(-2,2) + 0.1*random(0,9);
+            particles[i][2] = random(0,2) + 0.1*random(0,9);
+            particles[i][3] = X;
+            particles[i][4] = Y;
+            particles[i][5] = Z;
+          }
+          phaseTime = millis();
+        }
+      }
+      if(phase == 1){
+        for(int i = 0; i < 28; i ++){
+          //particles[i][0] = particles[i][0] - (0.01 * abs(particles[i][0])/particles[i][0]);
+          //particles[i][1] = particles[i][1] - (0.01 * abs(particles[i][1])/particles[i][1]);
+          particles[i][2] = particles[i][2] - 0.01;
+          particles[i][3] = (0.02 * particles[i][0]) + particles[i][3];
+          particles[i][4] = (0.02 * particles[i][1]) + particles[i][4];
+          particles[i][5] = (0.02 * particles[i][2]) + particles[i][5];
+        }
+
+        for(int i = 0; i < 28; i ++){
+          if((int)(particles[i][5]) == z){
+            if((int)(particles[i][3]) >= 0 && (int)(particles[i][3]) < 8){
+              b[(int)(particles[i][3])] |= (1<<(int)(particles[i][4]));
+            }
+          }
+        }
+
+        if(millis() - phaseTime > 500){
+          phase = 2;
+          phaseTime = millis();
+          z = 8;
+        }
+
+      }
+      if(phase==2){
+
+        for(int i = 0; i < 28; i ++){
+          particles[i][3] = (0.01 * particles[i][0]) + particles[i][3];
+          particles[i][4] = (0.01 * particles[i][1]) + particles[i][4];
+
+
+          particles[i][2] = particles[i][2] - 0.02;
+          particles[i][5] = (0.01 * particles[i][2]) + particles[i][5];  
+        }
+
+        for(int i = 0; i < 28; i ++){
+          if((int)(particles[i][5]) == z){
+            if((int)(particles[i][3]) >= 0 && (int)(particles[i][3]) < 8){
+              b[(int)(particles[i][3])] |= (1<<(int)(particles[i][4]));
+            }
+          }
+        }
+
+        if(millis() - phaseTime > 2200){
+          phase = 0;
+          X = random(2,6);
+          Y = random(2,6);
+          Z = random(4,6);
+          z = 8;
+          delay(300);
+        }
+      }
+      for(int i = 0; i < 8; i ++){
+        LC.sendData(b[i]);
+      }
+      LC.latch();
+    }
+  }
+  while(millis() - runTime < duration); 
+}
+
+void rain(long duration){
+  LC.clearCube();
+  runTime = millis();
+  double drops[18][4]; //x,y,z,v
+  for(int i = 0; i < 18; i ++){
+    drops[i][0] = random(0,8);
+    drops[i][1] = random(0,8);
+    drops[i][2] = random(-40, 0);
+    drops[i][3] = 3;
+  }
+  do{
+    for(int i = 0; i < 8; i ++){
+      drops[i][3] = drops[i][3] + 0.01;
+      drops[i][2] = (0.07 * drops[i][3]) + drops[i][2];
+    }
+    for(int z = 0; z < 8; z ++){
+      LC.sendData(0x01<<z);
+      LC.sendData(0x00);
+      for(int i = 0; i < 8; i ++){
+        b[i] = 0x00; 
+      }
+      for(int i = 0; i < 18; i ++){
+        if((int)(drops[i][2]) == z){
+          b[(int)(drops[i][0])] |= (1<<(int)(drops[i][1]));
+        }
+        if(drops[i][2] > 8){
+          drops[i][0] = random(0,8);
+          drops[i][1] = random(0,8);
+          drops[i][2] = random(-24, 0);
+          drops[i][3] = 3;
+        }
+      }
+      for(int i = 0; i < 8; i ++){
+        LC.sendData(b[i]); 
+      }
+      LC.latch();
+    }
+  }
+  while(millis() - runTime < duration);
+}
+
+void spark(int duration){
+  LC.clearCube();
+  runTime = millis();
+  long phaseTime = millis();
+  int sparkTime = 500;
+  int phase = 0;
+  int slowRate = 1;
+  double particles[20][6]; //vx,xy,vz,x,y,z
+  for(int i = 0; i < 20; i ++){
+    particles[i][0] = random(1,3) + 0.1*random(0,9);
+    particles[i][1] = random(1,3) + 0.1*random(0,9);
+    particles[i][2] = random(-3,1) + 0.1*random(0,9);
+    particles[i][3] = 0;
+    particles[i][4] = 0;
+    particles[i][5] = 8;
+  }
+  do{
+    slowRate ++;
+    if(phase == 0){
+      for(int i = 0; i < 20; i ++){
+        particles[i][0] = particles[i][0] - 0.5/slowRate;
+        particles[i][1] = particles[i][1] - 0.5/slowRate;
+        particles[i][2] = particles[i][2] - 0.05;
+        particles[i][3] = (0.15 * particles[i][0]) + particles[i][3];
+        particles[i][4] = (0.15 * particles[i][1]) + particles[i][4];
+        particles[i][5] = (0.15 * particles[i][2]) + particles[i][5];
+      }
+      if(millis() - phaseTime > 600){
+        phaseTime = millis();
+        phase = 1;
+        slowRate = 1;
+        sparkTime = random(500, 4000);
+      }
+    }
+    if(phase == 1){
+      for(int i = 0; i < 20; i++){
+        particles[i][2] = particles[i][2] - 0.1;
+        particles[i][3] = (0.15 * particles[i][0]) + particles[i][3];
+        particles[i][4] = (0.15 * particles[i][1]) + particles[i][4];
+        particles[i][5] = (0.15 * particles[i][2]) + particles[i][5];
+      }
+      if(millis() - phaseTime > sparkTime){
+        phaseTime = millis();
+        phase = 0;
+        for(int i = 0; i < 20; i ++){
+          particles[i][0] = random(1,3) + 0.1*random(0,9);
+          particles[i][1] = random(1,3) + 0.1*random(0,9);
+          particles[i][2] = random(-3,1) + 0.1*random(0,9);
+          particles[i][3] = 0;
+          particles[i][4] = 0;
+          particles[i][5] = 7;
+          slowRate = 1;
+        }
+      }
+    }
+    for(int z = 0; z < 8; z ++){
+      LC.sendData(0x01<<z);
+      LC.sendData(0x00);
+      for(int i = 0; i < 8; i ++){
+        b[i] = 0x00;
+      }
+      if(z == 7 && random(0,200) < 10){
+        b[0] = 0x01;
+      }
+
+      for(int i = 0; i < 20; i ++){
+        if((int)(particles[i][5]) == z){
+          if((int)(particles[i][3]) >= 0 && (int)(particles[i][3] < 8)){
+            b[(int)(particles[i][3])]  |= (1<<(int)(particles[i][4]));
+          }
+        }
+      }
+      for(int i = 0; i < 8; i ++){
+        LC.sendData(b[i]); 
+      }
+      LC.latch();
+    }
+  }
+  while(millis() - runTime < duration);
+}
+
+void morph(int duration){
+  runTime = millis();
+  LC.clearCube();
+  double spikes[4][5]; //x,y,intialZ,z,dir
+  for(int i = 0; i < 4; i ++){
+    spikes[i][0] = random(1, 7);
+    spikes[i][1] = random(1, 7);
+    spikes[i][2] = random(1, 5);
+    spikes[i][3] = 0;
+    spikes[i][4] = 1;
+  }
+  do{
+    for(int z = 0; z < 8; z ++){
+      LC.sendData(0x01<<z);
+      LC.sendData(0x00);
+      for(int i = 0; i < 8; i ++){
+        if(z == 0 || z == 7){
+          b[i] = 0xFF;
+        }
+        else{
+          b[i] = 0x00; 
+        }
+      }
+      for(int i = 0; i < 4; i ++){
+        if(z <= spikes[i][3]){
+          b[(int)(spikes[i][0])] |= (0x01<<(int)(spikes[i][1]));
+        }
+      }
+      for(int i = 0; i < 8; i ++){
+        LC.sendData(b[i]); 
+      }
+      LC.latch();
+    }
+    for(int i = 0; i < 4; i ++){
+      spikes[i][3] = spikes[i][3] + 0.08*spikes[i][4];
+      if(spikes[i][3] > spikes[i][2]){
+        spikes[i][4] = -spikes[i][4];
+      }
+      if(spikes[i][3] < 0){
+        spikes[i][0] = random(1, 7);
+        spikes[i][1] = random(1, 7);
+        spikes[i][2] = random(1, 6);
+        spikes[i][3] = 0;
+        spikes[i][4] = 1;
+      }
+    }
+  }
+  while(millis() - runTime < duration); 
+}
+void skyFall(long duration){
+  LC.clearCube();
+  runTime = millis();
+  long time;
+  int dir = -1;
+  double voxels[8][8][2]; // x,y -- z, time
+  for(int x = 0; x < 8; x ++){
+    for(int y = 0; y < 8; y ++){
+      voxels[x][y][0] = 7;
+      voxels[x][y][1] = random(0, 2500);
+
+    }
+  }
+  time = millis();
+  do{
+    for(int z = 0; z < 8; z ++){
+      for(int i = 0; i < 8; i ++){
+        b[i] = 0x00; 
+      }
+      LC.sendData(0x01<<z);
+      LC.sendData(0x00);
+
+
+      for(int x = 0; x < 8; x ++){
+        for(int y = 0; y < 8; y ++){
+          if(millis()-time > voxels[x][y][1] && voxels[x][y][0] >= 0 && voxels[x][y][0] <= 7){
+            voxels[x][y][0] = voxels[x][y][0] + (0.08*dir);
+          }
+        }
+      }
+
+      for(int x = 0; x < 8; x ++){
+        for(int y = 0; y < 8; y ++){
+          if((int)(voxels[x][y][0]) == z){
+            b[x] |= (0x01<<y);
+          }
+        } 
+      }
+
+
+      for(int i = 0; i < 8; i++){
+        LC.sendData(b[i]); 
+      }
+      LC.latch();
+    }
+    if(millis()-time > 3000){
+      dir = -dir;
+      for(int x = 0; x < 8; x ++){
+        for(int y = 0; y < 8; y ++){
+          voxels[x][y][0] = voxels[x][y][0] + (0.08*dir);
+          voxels[x][y][1] = random(0, 2500);
+        }
+      }
+      time = millis();
+    }
+  }
+  while(millis()-runTime < duration); 
+}
+void xFall(int duration){
+  LC.clearCube();
+  runTime = millis();
+  long time;
+  int dir = -1;
+  double voxels[8][8][2]; // y,z -- x, time
+  for(int y = 0; y < 8; y ++){
+    for(int z = 0; z < 8; z ++){
+      voxels[y][z][0] = 7;
+      voxels[y][z][1] = random(0, 1500);
+
+    }
+  }
+  time = millis();
+  do{
+    for(int Z = 0; Z < 8; Z ++){
+      for(int i = 0; i < 8; i ++){
+        b[i] = 0x00; 
+      }
+      LC.sendData(0x01<<Z);
+      LC.sendData(0x00);
+
+
+      for(int y = 0; y < 8; y ++){
+        for(int z = 0; z < 8; z ++){
+          if(millis()-time > voxels[y][z][1] && voxels[y][z][0] >= 0 && voxels[y][z][0] <= 7){
+            voxels[y][z][0] = voxels[y][z][0] + (0.08*dir);
+          }
+        }
+      }
+
+      for(int y = 0; y < 8; y ++){
+        for(int z = 0; z < 8; z ++){
+          if(z == Z){
+            b[(int)(voxels[y][z][0])] |= (0x01<<y);
+          }
+        } 
+      }
+
+
+      for(int i = 0; i < 8; i++){
+        LC.sendData(b[i]); 
+      }
+      LC.latch();
+    }
+    if(millis()-time > 2000){
+      dir = -dir;
+      for(int y = 0; y < 8; y ++){
+        for(int z = 0; z < 8; z ++){
+          voxels[y][z][0] = voxels[y][z][0] + (0.08*dir);
+          voxels[y][z][1] = random(0, 1500);
+        }
+      }
+      time = millis();
+    }
+  }
+  while(millis()-runTime < duration); 
+}
+
+void probability(int duration){
+  LC.clearCube();
+  runTime = millis();
+  long time;
+  int dir = -1;
+  boolean complete = false;
+  double voxels[8][8][2]; // y,z -- x, time
+  for(int y = 0; y < 8; y ++){
+    for(int z = 0; z < 8; z ++){
+      voxels[y][z][0] = 7;
+      voxels[y][z][1] = random(0, 64);
+    }
+  }
+  time = millis();
+  do{
+    for(int Z = 0; Z < 8; Z ++){
+      LC.sendData(0x01<<Z);
+      LC.sendData(0x00);
+
+      for(int y = 0; y < 8; y ++){
+        for(int z = 0; z < 8; z ++){
+          if(voxels[y][z][1] == 23 && voxels[y][z][0] >= 0 && voxels[y][z][0] <= 7){
+            voxels[y][z][0] += (0.08*dir);
+          }
+        }
+      }
+      if(millis() - time > 100){
+        time = millis();
+        complete = true;
+        for(int y = 0; y < 8; y ++){
+          for(int z = 0; z < 8; z ++){
+            if(voxels[y][z][1] != 23){
+              voxels[y][z][1] = random(0, 64);
+            }
+            if((int)(voxels[y][z][0]) != (3.5 + (3.5*dir))){
+              complete = false;
+            }
+          }
+        }
+      }
+      if(complete){
+        dir = -dir;
+        complete = false;
+        for(int y = 0; y < 8; y ++){
+          for(int z = 0; z < 8; z ++){
+            voxels[y][z][1] = random(0, 64);
+            voxels[y][z][0] += (0.08*dir);
+          }
+        }
+      }
+      for(int y = 0; y < 8; y ++){
+        for(int z = 0; z < 8; z ++){
+          if(z == Z){
+            b[(int)(voxels[y][z][0])] |= (0x01<<y);
+          }
+        }
+      }
+
+      for(int i = 0; i < 8; i++){
+        LC.sendData(b[i]);
+        b[i] = 0x00;
+      }
+      LC.latch();
+    }
+  }
+  while(millis()-runTime < duration); 
+}
+void hollowCube(int duration){
+  runTime = millis();
+  do{
+    for(int z = 0; z < 8; z ++){
+      LC.sendData(0x01<<z);
+      LC.sendData(0x00);
+      for(int x = 0; x < 8; x ++){
+        for(int y = 0; y < 8; y ++){
+          if((x==0||x==7)&&(y==0||y==7)){
+            b[x] |= 1<<y;
+          }
+          if(z==0||z==7){
+            b[0] |= 0xff;
+            b[1] |= 0x81;
+            b[2] |= 0x81;
+            b[3] |= 0x81;
+            b[4] |= 0x81;
+            b[5] |= 0x81;
+            b[6] |= 0x81;
+            b[7] |= 0xff;
+
+          }
+        }
+      }
+
+      for(int i = 0; i < 8; i++){
+        LC.sendData(b[i]);
+        b[i] = 0x00;
+      }
+      LC.latch();
+    }
+  }
+  while(millis() - runTime < duration); 
+}
+void randomVoxel(long duration){
+  runTime = millis();
+  long time = millis();
+  double voxel[2][6]; //x,y,z,vx,vy,vz
+  for(int j=0;j<2;j++){
+    for(int i = 0; i < 6; i ++){
+      voxel[j][i] = random(2,6); 
+    }
+  }
+
+  do{
+    for(int z = 0; z < 8; z ++){
+      LC.sendData(0x01<<z);
+      LC.sendData(0x00);
+      for(int x = 0; x < 8; x ++){
+        for(int y = 0; y < 8; y ++){
+          if((x==0||x==7)&&(y==0||y==7)){
+            b[x] |= 1<<y;
+          }
+          if(z==0||z==7){
+            b[0] |= 0xff;
+            b[1] |= 0x81;
+            b[2] |= 0x81;
+            b[3] |= 0x81;
+            b[4] |= 0x81;
+            b[5] |= 0x81;
+            b[6] |= 0x81;
+            b[7] |= 0xff;
+
+          }
+        }
+      }
+      for(int j=0;j<2;j++){
+        for(int i=0; i<3; i++){
+          voxel[j][i] += (voxel[j][i+3]*0.003);
+          if(voxel[j][i] >= 8 || voxel[j][i] <= 0){
+            voxel[j][i+3] = -voxel[j][i+3]; 
+          }
+        }
+        if((int)(voxel[j][2]) == z){
+          b[(int)(voxel[j][0])] |= 0x01<<(int)(voxel[j][1]); 
+        }
+      }
+      for(int i = 0; i < 8; i++){
+        LC.sendData(b[i]);
+        b[i] = 0x00;
+      }
+      LC.latch();
+    }
+    if(millis() - time > 1000){
+      for(int j=0;j<2;j++){
+        voxel[j][3] = random(-6,6);
+        voxel[j][4] = random(-6,6);
+        voxel[j][5] = random(-6,6);
+      }
+      time = millis();
+    }
+  }
+  while(millis() - runTime < duration); 
+}
+void sparkle(long duration){
+  runTime = millis();
+  long voxels[80][5]; //x, y, z, duration, time
+  for(int i = 0; i < 80; i ++){
+    voxels[i][0] = random(0,8);
+    voxels[i][1] = random(0,8);
+    voxels[i][2] = random(0,8);
+    voxels[i][3] = random(200,1500);
+    voxels[i][4] = millis();
+  }
+  do{
+    for(int z = 0; z < 8; z ++){
+      LC.sendData(0x01<<z);
+      LC.sendData(0x00);
+
+      for(int i = 0; i < 80; i ++){
+        if(voxels[i][2] == z){
+          b[voxels[i][0]] |= 0x01<<voxels[i][1];
+        }
+        if(millis() - voxels[i][4] > voxels[i][3]){
+          voxels[i][0] = random(0,8);
+          voxels[i][1] = random(0,8);
+          voxels[i][2] = random(0,8);
+          voxels[i][3] = random(200,1500);
+          voxels[i][4] = millis();
+        }
+      }
+      for(int i = 0; i < 8; i++){
+        LC.sendData(b[i]);
+        b[i] = 0x00;
+      }
+      LC.latch();
+    }
+  }
+  while(millis() - runTime < duration);
+}
+void ball(long duration){
+  runTime = millis();
+  long hTime = millis();
+  long jTime = millis();
+  int h = 3;
+  int j = 3;
+  double k = 3;
+  int r = 2;
+  int hdir = 1;
+  int jdir = 1;
+  int kdir = 1;
+  do{
+    for(int z=0;z<8;z++){
+      LC.sendData(1<<z);
+      LC.sendData(0x00);
+      for(int x=0;x<8;x++){
+        for(int y=0; y<8;y++){
+          if((int)((z-k)*(z-k))>(int)((r*r)-(r+1))-((x-h)*(x-h))-((y-j)*(y-j))&&(int)((z-k)*(z-k))<(int)((r*r)+(r+1))-((x-h)*(x-h))-((y-j)*(y-j))){
+            b[x] |= 1<<y; 
+          }
+        } 
+      }
+      if(millis()-hTime > 200){ //150
+        h+=hdir;
+        hTime = millis();
+        if(h >= (8-r) || h <= (r-1)){
+          hdir = -hdir;
+        } 
+      }
+      if(millis()-jTime > 150){ //100
+        j+=jdir;
+        jTime = millis();
+        if(j >= (8-r) || j <= (r-1)){
+          jdir = -jdir;
+        } 
+      }
+
+      k+=(kdir*0.01);
+      if(k >= (8-r) || k <= (r-1)){
+        kdir = -kdir;
+      }
+
+      for(int i=0; i<8;i++){
+        LC.sendData(b[i]);
+        b[i] = 0x00;
+      }
+      LC.latch();
+    }
+  }
+  while(millis()-runTime < duration); 
+}
+void MIT(){
+ while(true){
+  for(int z = 0; z < 8; z++){
+    LC.sendData(1<<z);
+    LC.sendData(0x00);
+   switch(z){
+   case 0:
+   LC.sendData(0x00);
+   LC.sendData(0x00);
+   LC.sendData(0x00);
+   LC.sendData(0x00);
+   LC.sendData(0x00);
+   LC.sendData(0x00);
+   LC.sendData(0x00);
+   LC.sendData(0x00);
+   break;
+   case 1:
+   LC.sendData(0xcc);//c8
+   LC.sendData(0x01);//cc
+   LC.sendData(0x01);
+   LC.sendData(0x00);//3
+   LC.sendData(0x01);//3
+   LC.sendData(0x01);//3
+   LC.sendData(0x00);
+   LC.sendData(0x00);
+   break;
+   case 2:
+   LC.sendData(0xcc);//c8
+   LC.sendData(0x01);//cc
+   LC.sendData(0x01);//02
+   LC.sendData(0x00);//03
+   LC.sendData(0x01);//03
+   LC.sendData(0x01);//03
+   LC.sendData(0x00);
+   LC.sendData(0x00);
+   break;
+   case 3:
+   LC.sendData(0xfc);//f8
+   LC.sendData(0x01);//fc
+   LC.sendData(0x01);
+   LC.sendData(0x00);
+   LC.sendData(0x01);
+   LC.sendData(0x01);
+   LC.sendData(0x00);
+   LC.sendData(0x00);
+   break;
+   case 4:
+   LC.sendData(0xfc);//f8
+   LC.sendData(0x01);//fc
+   LC.sendData(0x01);
+   LC.sendData(0x00);
+   LC.sendData(0x01);
+   LC.sendData(0x01);
+   LC.sendData(0x00);
+   LC.sendData(0x00);
+   break;
+   case 5:
+   LC.sendData(0xfc);//c8
+   LC.sendData(0x00);
+   LC.sendData(0x00);
+   LC.sendData(0x00);
+   LC.sendData(0x00);
+   LC.sendData(0x00);
+   LC.sendData(0x00);
+   LC.sendData(0x00);
+   break;
+   case 6:
+   LC.sendData(0xfc);//c8
+   LC.sendData(0x01);
+   LC.sendData(0x01);
+   LC.sendData(0x00);
+   LC.sendData(0x01);
+   LC.sendData(0x01);
+   LC.sendData(0x01);
+   LC.sendData(0x01);
+   break;
+   case 7:
+   LC.sendData(0xfc);//c8
+   LC.sendData(0x01);
+   LC.sendData(0x01);
+   LC.sendData(0x00);
+   LC.sendData(0x01);
+   LC.sendData(0x01);
+   LC.sendData(0x01);
+   LC.sendData(0x01);
+   break;
+   }
+   LC.latch();
+   LC.clearCube();
+  }
+ } 
+}
+void textFly(){
+  
+  //byte letters[4][8] = {{0x60,0x60,0x7C,0x7E,0x66,0x66,0x7E,0x7C}, {0x3C,0x7E,0xE7,0xC3,0xC3,0xE7,0x7E,0x3C}, {0x7E,0x7E,0x60,0x60,0x60,0x60,0x60,0x60}, {0x18,0x18,0x18,0x18,0x3C,0x66,0xC3,0xC3}};
+  byte letters[4][8] = {{0xFF,0xFF,0x60,0x18,0x06,0x63,0x7F,0x3E}, {0x3C,0x7E,0xE7,0xC3,0xC3,0xE7,0x7E,0x3C}, {0x7E,0x7E,0x18,0x18,0x18,0x38,0x38,0x18}, {0x06,0x06,0xFF,0xFF,0x66,0x36,0x1E,0x0E}};
+  //byte letters[8][8] = {{0x7E,0x7E,0x60,0x60,0x60,0x60,0x60,0x60}, {0x7E,0x7E,0x60,0x7C,0x7C,0x60,0x7E,0x7E}, {0x7C,0x7E,0x66,0x66,0x66,0x66,0x7E,0x7C}, {0x00,0x00,0x00,0x3C,0x3C,0x00,0x00,0x00}, {0x3C,0x7E,0x66,0x60,0x60,0x66,0x7E,0x3C}, {0x3C,0x7E,0x66,0x66,0x66,0x66,0x66,0x66}, {0x7C,0x7E,0x66,0x7C,0x7C,0x66,0x7E,0x7C}, {0x7E,0x7E,0x60,0x7C,0x7C,0x60,0x7E,0x7E}};
+  int xPosi = 0;
+  int counter = 0;
+  int letterIndex = 0;
+  boolean complete = false;
+  byte letter[8][8] = {{0x01,0x01,0x01,0x01,0x01,0x01,0x01,0x01,0x01,0x01,0x01,0x01,0x01,0x01,0x01,0x01}, {0x00,0x00,0x00,0x00,0x00,0x01,0x01,0x00}, {}};
+  do{
+    for(int z=0; z<8; z++){
+      LC.sendData(0x01<<z);
+      LC.sendData(0x00);
+      switch(z){
+       case 0:
+        b = (0x01,0x01,0x01,0x01,0x01,0x01,0x01,0x01};
+        break;
+       case 1:
+        b = (0x01,0x01,0x01,0x01,0x01,0x01,0x01,0x01};
+        break;
+        case 2:
+        b = {0x00,0x00,0x00,0x00,0x00,0x01,0x01,0x00};
+        break;
+        case 3:
+        b = {0x00,0x00,0x00,0x01,0x01,0x00,0x00,0x00};
+        break;
+        case 4:
+        b = {0x00,0x01,0x01,0x00,0x00,0x00,0x00,0x00};
+        break;
+        case 5:
+        b = {0x01,0x01,0x00,0x00,0x00,0x01,0x01};
+        break;
+        
+      }
+        for(int i = 0; i < 8; i ++){
+         LC.sendData(b[i]);
+         b[i] = 0x00; 
+        }
+        LC.latch();
+    }
+    counter++;
+    if(counter>7){
+     xPosi++;
+     counter=0;
+     if(xPosi>=8){
+       xPosi=0;
+       letterIndex++;
+       if(letterIndex>3){
+        complete = true;
+       }
+     }
+    }
+  }while(!complete);
+  LC.clearCube();
+}
+
+void graph(long duration){
+ runTime = millis();
+  LC.clearCube();
+  int h = random(1, 7);
+  int j = random(1, 7);
+  int k = random(1, 7);
+  float r = 0;
+   do{
+    for(int z = 0; z < 8; z ++){
+      for(int i = 0; i < 8; i ++){
+       b[i] = 0x00; 
+      }
+      LC.sendData(0x01<<z);
+      LC.sendData(0x00);
+      for(int x = 0; x < 8; x ++){
+       for(int y = 0; y < 8; y ++){
+        if((z-k)*(z-k)>(int)((r*r)-(r+1))-((x-h)*(x-h))-((y-j)*(y-j))&&(z-k)*(z-k)<(int)((r*r)+(r+1))-((x-h)*(x-h))-((y-j)*(y-j))){
+          b[x] |= 0x01<<y;
+        }
+       } 
+      }
+      for(int i = 0; i < 8; i ++){
+       LC.sendData(b[i]); 
+      }
+      LC.latch();
+    }
+    r+=0.1;
+    if(r>11){
+     r = 0;
+     h = random(1, 7);
+     j = random(1, 7);
+     k = random(1, 7);
+     delay(200);
+    }
+   }while(millis() - runTime < duration); 
+}
+
+
+
+
+
