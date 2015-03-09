@@ -4,9 +4,12 @@ Decsription: This project is for the development of an 8x8x8 LED Cube. The cube 
 v0.0.1
 --------
 Functions:
-  Moving x-y-z-slant planes\n*
+  Moving x-y-z-slant planes
+  
   Fireworks
+  
   Rain
+  
   Spark
   Random Pixel Fall
   Rotated Pixel Fall
